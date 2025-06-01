@@ -2,12 +2,12 @@ import os
 import cv2
 import torch
 from torch import nn
-import torchvision.models as models
+from torchvision.models import resnet50, ResNet50_Weights
 
 
 class model:
     def __init__(self):
-        self.checkpoint = "model_weights.pth"
+        self.checkpoint = "resnet18_best.pth"
         # The model is evaluated using CPU, please do not change to GPU to avoid error reporting.
         self.device = torch.device("cpu")
 
@@ -20,7 +20,7 @@ class model:
         :param dir_path: path to the submission directory (for internal use only).
         :return:
         """
-        self.model = ResNet34(num_classes=5)
+        self.model = ResNet18Classifier(num_classes=5)
         # join paths
         checkpoint_path = os.path.join(dir_path, self.checkpoint)
         self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
@@ -51,13 +51,18 @@ class model:
         return int(pred_class)
 
 
-class ResNet34(nn.Module):
-    def __init__(self, num_classes=5, pretrained=False):
-        super(ResNet34, self).__init__()
-        self.resnet = models.resnet34(pretrained=pretrained)
-        num_features = self.resnet.fc.in_features
-        self.resnet.fc = nn.Linear(in_features=num_features, out_features=num_classes)
+class ResNet18Classifier(nn.Module):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+        super().__init__()
+        from torchvision.models import resnet18, ResNet18_Weights
+        if pretrained:
+            self.resnet = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1) # Use appropriate weights for ResNet18
+        else:
+            self.resnet = resnet18(weights=None)
+        
+        # Modify the final classification layer
+        num_ftrs = self.resnet.fc.in_features
+        self.resnet.fc = nn.Linear(num_ftrs, num_classes)
 
-    def forward(self, x):
-        x = self.resnet(x)
-        return x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.resnet(x)

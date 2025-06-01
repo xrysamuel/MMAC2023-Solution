@@ -14,3 +14,17 @@ Run:
 ```bash
 python train.py
 ```
+
+Submit:
+
+```bash
+cp model_outputs/resnet50_classifier_best.pth submit/resnet50_classifier_best.pth
+zip -r submit.zip submit/*
+```
+
+## Result
+
+Model 
+ResNet18 10.7M 0.7823
+ResNet50 22.4M 0.7540
+MobileNetV3s 4.0M 0.7500

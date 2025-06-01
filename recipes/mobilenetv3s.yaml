@@ -1,0 +1,17 @@
+images_dir: 1. Classification of Myopic Maculopathy/1. Images/1. Training Set
+labels_path: 1. Classification of Myopic Maculopathy/2. Groundtruths/1. MMAC2023_Myopic_Maculopathy_Classification_Training_Labels.csv
+validation_images_dir: 1. Classification of Myopic Maculopathy/1. Images/2. Validation Set
+validation_labels_path: 1. Classification of Myopic Maculopathy/2. Groundtruths/2. MMAC2023_Myopic_Maculopathy_Classification_Validation_Labels.csv
+image_size: [224, 224]
+batch_size: 32
+num_epochs: 50
+learning_rate: 0.0001
+test_split_ratio: 0.2
+eval_steps: 100
+patience: 3
+num_classes: 5
+output_dir: output/mobilenetv3s
+model_name: mobilenetv3s
+model_save_name: mobilenetv3s_best.pth
+random_seed: 42 # Set a specific seed for reproducibility
+pretrained: True # Use pre-trained weights by default
