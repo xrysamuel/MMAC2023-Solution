@@ -20,11 +20,12 @@ class temp_eval:
 
 def get_model_params(model: nn.Module):
     total_params = sum(p.numel() for p in model.parameters())
-    total_params_m = total_params / 1024 / 1024
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    return dict(
-        total_params=total_params,
-        total_params_m=total_params_m,
-        trainable_params=trainable_params
-    )
+    return {
+        "Total Parameters (M)": round(total_params / 1_000_000, 2), # Converted to Millions, rounded to 2 decimal places
+        "Trainable Parameters (M)": round(trainable_params / 1_000_000, 2),
+        "Total Parameters (raw)": total_params,
+        "Trainable Parameters (raw)": trainable_params,
+        "Percentage Trainable": f"{round((trainable_params / total_params) * 100, 2)}%" if total_params > 0 else "0%"
+    }

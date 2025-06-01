@@ -149,7 +149,7 @@ class RETFoundMAEClassifier(nn.Module):
     class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
         """Vision Transformer with support for global average pooling"""
 
-        def __init__(self, num_classes, global_pool=True, **kwargs):
+        def __init__(self, num_classes, **kwargs):
             kwargs.update(
                 dict(
                     img_size=224,
@@ -166,13 +166,11 @@ class RETFoundMAEClassifier(nn.Module):
             )
             super().__init__(**kwargs)
 
-            self.global_pool = global_pool
-            if self.global_pool:
-                norm_layer = kwargs["norm_layer"]
-                embed_dim = kwargs["embed_dim"]
-                self.fc_norm = norm_layer(embed_dim)
+            norm_layer = kwargs["norm_layer"]
+            embed_dim = kwargs["embed_dim"]
+            self.fc_norm = norm_layer(embed_dim)
 
-                del self.norm  # remove the original norm
+            del self.norm  # remove the original norm
 
         def forward_features(self, x):
             B = x.shape[0]
@@ -188,30 +186,27 @@ class RETFoundMAEClassifier(nn.Module):
             for blk in self.blocks:
                 x = blk(x)
 
-            if self.global_pool:
-                x = x[:, 1:, :].mean(
-                    dim=1, keepdim=True
-                )  # global pool without cls token
-                outcome = self.fc_norm(x)
-            else:
-                x = self.norm(x)
-                outcome = x[:, 0]
+            x = x[:, 1:, :].mean(
+                dim=1, keepdim=True
+            )  # global pool without cls token
+            outcome = self.fc_norm(x)
 
             return outcome
 
-    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, freeze_backbone: bool = True):
         super().__init__()
-        from torchvision.models import mobilenet_v3_large, MobileNet_V3_Large_Weights
         from timm.models.layers import trunc_normal_
 
         if pretrained:
             self.retfoundmae = self.VisionTransformer(num_classes)
+            logger.info("Attempting to download model from Hugging Face Hub.")
             from huggingface_hub import hf_hub_download
             checkpoint_path = hf_hub_download(
                 repo_id=f'YukunZhou/RETFound_mae_natureCFP',
                 filename=f'RETFound_mae_natureCFP.pth',
             )
-            checkpoint = torch.load(checkpoint_path, map_location='cpu')
+            logger.info(f"Loading model checkpoint from: {checkpoint_path}.")
+            checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
             checkpoint_model = checkpoint['model']
             checkpoint_model = {k.replace("backbone.", ""): v for k, v in checkpoint_model.items()}
             checkpoint_model = {k.replace("mlp.w12.", "mlp.fc1."): v for k, v in checkpoint_model.items()}
@@ -219,7 +214,7 @@ class RETFoundMAEClassifier(nn.Module):
             state_dict = self.retfoundmae.state_dict()
             for k in ['head.weight', 'head.bias']:
                 if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                    logger.info(f"Removing key {k} from pretrained checkpoint")
+                    logger.warning(f"Removing key {k} from pretrained checkpoint")
                     del checkpoint_model[k]
             self._interpolate_pos_embed(self.retfoundmae, checkpoint_model)
             self.retfoundmae.load_state_dict(checkpoint_model, strict=False)
@@ -237,7 +232,15 @@ class RETFoundMAEClassifier(nn.Module):
             trunc_normal_(self.retfoundmae.head.weight, std=2e-5)
             logger.info("Initialized RETFoundMAE without pre-trained weights.")
 
-    def _interpolate_pos_embed(model, checkpoint_model):
+        if freeze_backbone and pretrained:
+            for name, param in self.retfoundmae.named_parameters():
+                if "head" not in name:
+                    param.requires_grad = False
+                else:
+                    param.requires_grad = True
+                    logger.info(f"Parameter {name} is trainable.")
+
+    def _interpolate_pos_embed(self, model, checkpoint_model):
         if 'pos_embed' in checkpoint_model:
             pos_embed_checkpoint = checkpoint_model['pos_embed']
             embedding_size = pos_embed_checkpoint.shape[-1]
