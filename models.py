@@ -240,6 +240,7 @@ class RETFoundMAEClassifier(nn.Module):
                     param.requires_grad = True
                     logger.info(f"Parameter {name} is trainable.")
 
+
     def _interpolate_pos_embed(self, model, checkpoint_model):
         if 'pos_embed' in checkpoint_model:
             pos_embed_checkpoint = checkpoint_model['pos_embed']

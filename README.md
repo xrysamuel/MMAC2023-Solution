@@ -18,10 +18,43 @@ python train.py recipes/resnet18.yaml
 Submit by modifying the model class in model.py and copying the best model checkpoint to the submit folder.
 
 ```bash
+rm submit.zip
 zip -r submit.zip submit/*
 ```
 
 If you are training a RETFound model and need to load from a pre-trained checkpoint, please obtain checkpoint access from Hugging Face first, then execute `huggingface-cli login --token <yourtoken>`.
+
+Using notebook:
+
+```python
+import os
+import sys
+import logging
+import argparse
+
+from transformers import HfArgumentParser
+
+from train import Trainer, TrainArgs
+
+# Configure logging
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)  # Remove all handlers associated with the root logger object.
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+parser = HfArgumentParser((TrainArgs))
+
+try:
+    train_args, = parser.parse_yaml_file(yaml_file="recipes/retfound.yaml")
+except Exception as e:
+    logging.error(f"Error parsing YAML file: {e}")
+    exit()
+
+logging.info(train_args)
+
+trainer = Trainer(train_args)
+trainer.train()
+```
 
 ## Result
 

@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import cv2
 from cv2 import imread, resize, cvtColor, COLOR_BGR2RGB, COLOR_RGB2BGR, BORDER_CONSTANT
 import torch
 from torch.utils.data import Dataset
@@ -12,7 +13,7 @@ import matplotlib.pyplot as plt
 class AugmentationTransform:
     """
     Encapsulates various data augmentation techniques using Albumentations.
-    It expects HWC, BGR input and returns HWC, BGR output.
+    It expects HWC, RGB input and returns HWC, RGB output.
     """
 
     def __init__(self):
@@ -40,16 +41,97 @@ class AugmentationTransform:
     def __call__(self, image: np.ndarray) -> np.ndarray:
         """
         Applies the defined Albumentations augmentations.
-        Expects image in HWC, BGR order.
-        Returns augmented image in HWC, BGR order.
+        Expects image in HWC, RGB order.
+        Returns augmented image in HWC, RGB order.
         """
-        # Albumentations expects RGB, so convert from BGR to RGB first.
-        image_rgb = cvtColor(image, COLOR_BGR2RGB)
-        augmented_image_rgb = self.transform(image=image_rgb)["image"]
-        # Convert back to BGR as per requirement, before returning.
-        augmented_image_bgr = cvtColor(augmented_image_rgb, COLOR_RGB2BGR)
-        return augmented_image_bgr
+        augmented_image = self.transform(image=image)["image"]
+        return augmented_image
 
+class RandomCropTransform:
+    def __init__(self, size: int = 224, scale_size: int = 256):
+        """
+        Initializes the random crop transformation.
+        Args:
+            size (int): The final square side length of the cropped image, default is 224.
+            scale_size (int): The size to which the shorter side of the image will be scaled
+                              before cropping, default is 256.
+        """
+        self.size = size
+        self.scale_size = scale_size
+
+    def __call__(self, image: np.ndarray) -> np.ndarray:
+        """
+        Applies the random crop transformation to an image.
+        Args:
+            image (np.ndarray): Input image in HWC format, 0-255 range.
+        Returns:
+            np.ndarray: Transformed image in HWC format, 0-255 range.
+        """
+        h, w, _ = image.shape
+
+        # 1. Scale the shorter side to self.scale_size, maintaining aspect ratio for the longer side.
+        if h < w:
+            new_h = self.scale_size
+            new_w = int(w * (self.scale_size / h))
+        else:
+            new_w = self.scale_size
+            new_h = int(h * (self.scale_size / w))
+        image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+        # 2. Randomly crop to self.size x self.size.
+        h_resized, w_resized, _ = image.shape
+        # Ensure crop region doesn't go out of bounds
+        if h_resized > self.size:
+            top = np.random.randint(0, h_resized - self.size + 1)
+        else:
+            top = 0 # If the image itself is smaller than target size, crop from top
+        if w_resized > self.size:
+            left = np.random.randint(0, w_resized - self.size + 1)
+        else:
+            left = 0 # If the image itself is smaller than target size, crop from left
+        image = image[top:top + self.size, left:left + self.size, :]
+        return image
+
+class CenterCropTransform:
+    def __init__(self, size: int = 224, scale_size: int = 256):
+        """
+        Initializes the center crop transformation.
+        Args:
+            size (int): The final square side length of the cropped image, default is 224.
+            scale_size (int): The size to which the shorter side of the image will be scaled
+                              before cropping, default is 256.
+        """
+        self.size = size
+        self.scale_size = scale_size
+
+    def __call__(self, image: np.ndarray) -> np.ndarray:
+        """
+        Applies the center crop transformation to an image.
+        Args:
+            image (np.ndarray): Input image in HWC format, 0-255 range.
+        Returns:
+            np.ndarray: Transformed image in HWC format, 0-255 range.
+        """
+        h, w, _ = image.shape
+
+        # 1. Scale the shorter side to self.scale_size, maintaining aspect ratio for the longer side.
+        if h < w:
+            new_h = self.scale_size
+            new_w = int(w * (self.scale_size / h))
+        else:
+            new_w = self.scale_size
+            new_h = int(h * (self.scale_size / w))
+        image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+        # 2. Center crop to self.size x self.size.
+        h_resized, w_resized, _ = image.shape
+        top = (h_resized - self.size) // 2
+        left = (w_resized - self.size) // 2
+        # Ensure crop region doesn't go out of bounds
+        top = max(0, top)
+        left = max(0, left)
+        image = image[top:top + self.size, left:left + self.size, :]
+        return image
 
 class MMAC2023Task1Dataset(Dataset):
     def __init__(
@@ -88,6 +170,11 @@ class MMAC2023Task1Dataset(Dataset):
         # Sort image files to ensure consistent order
         self.image_files.sort()
 
+        # Define ImageNet standard mean and standard deviation as tensors
+        # These are for channels in RGB order
+        self.imagenet_mean = torch.tensor([0.485, 0.456, 0.406]).view(3, 1, 1)
+        self.imagenet_std = torch.tensor([0.229, 0.224, 0.225]).view(3, 1, 1)
+
     def __len__(self) -> int:
         """
         Returns the total number of samples in the dataset.
@@ -107,22 +194,28 @@ class MMAC2023Task1Dataset(Dataset):
         img_name: str = self.image_files[idx]
         img_path: str = os.path.join(self.images_dir, img_name)
 
-        # Read image using OpenCV: 1 loads a color image (BGR order)
-        image: np.ndarray = imread(img_path, 1)
-
         label: int = self.image_to_label[img_name]
         label_tensor: torch.Tensor = torch.tensor(
             label, dtype=torch.long
         )  # Convert label to a torch tensor
+
+        # Read image using OpenCV: 1 loads a color image (BGR order)
+        image: np.ndarray = imread(img_path, 1)
+        image = cvtColor(image, COLOR_BGR2RGB)  # convert to RGB
 
         for transform in self.transform:
             image = transform(image)
 
         image = resize(image, self.output_size)
         image = image / 255.0  # Normalize to [0, 1]
+
         # Convert NumPy array to PyTorch Tensor and permute dimensions
         # HWC (Height, Width, Channel) to CHW (Channel, Height, Width)
         image_tensor = torch.from_numpy(image).permute(2, 0, 1).float()
+
+        # Apply ImageNet standard normalization (mean and std)
+        image_tensor = (image_tensor - self.imagenet_mean) / self.imagenet_std
+
         return image_tensor, label_tensor
 
 
@@ -191,6 +284,7 @@ if __name__ == "__main__":
         transform=[
             vis_transform.collect,
             AugmentationTransform(),
+            RandomCropTransform(),
             vis_transform.collect,
             vis_transform.draw,
             vis_transform.discard_all,
@@ -211,7 +305,7 @@ if __name__ == "__main__":
     val_dataset: MMAC2023Task1Dataset = MMAC2023Task1Dataset(
         images_dir=validation_set_images_dir,
         labels_path=validation_set_labels_path,
-        transform=[],
+        transform=[CenterCropTransform()],
     )
     print(f"Number of validation samples: {len(val_dataset)}")
 

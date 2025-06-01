@@ -13,7 +13,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from transformers import HfArgumentParser
 
-from dataset import MMAC2023Task1Dataset, AugmentationTransform
+from dataset import MMAC2023Task1Dataset, AugmentationTransform, CenterCropTransform, RandomCropTransform
 from models import MODEL_CLASS_DICT
 from utils import temp_eval, get_model_params
 
@@ -81,7 +81,7 @@ class Trainer:
         full_dataset = MMAC2023Task1Dataset(
             images_dir=args.images_dir,
             labels_path=args.labels_path,
-            transform=[AugmentationTransform()]
+            transform=[AugmentationTransform(), RandomCropTransform()]
         )
 
         # Load validation dataset for final evaluation
@@ -89,7 +89,7 @@ class Trainer:
         validation_dataset = MMAC2023Task1Dataset(
             images_dir=args.validation_images_dir,
             labels_path=args.validation_labels_path,
-            transform=[]
+            transform=[CenterCropTransform()]
         )
 
         if args.train_test_split:
