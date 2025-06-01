@@ -3,6 +3,7 @@ import torch.nn as nn
 import logging
 from typing import Dict
 from functools import partial
+from utils import apply_lora_to_model
 
 # Configure logging
 logging.basicConfig(
@@ -193,7 +194,7 @@ class RETFoundMAEClassifier(nn.Module):
 
             return outcome
 
-    def __init__(self, num_classes: int = 5, pretrained: bool = True, freeze_backbone: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, lora_backbone: bool = True):
         super().__init__()
         from timm.models.layers import trunc_normal_
 
@@ -232,11 +233,11 @@ class RETFoundMAEClassifier(nn.Module):
             trunc_normal_(self.retfoundmae.head.weight, std=2e-5)
             logger.info("Initialized RETFoundMAE without pre-trained weights.")
 
-        if freeze_backbone and pretrained:
+        if lora_backbone and pretrained:
+            apply_lora_to_model(self.retfoundmae, exclude_modules=["head"])
+            logger.info(f"Apply lora to model.")
             for name, param in self.retfoundmae.named_parameters():
-                if "head" not in name:
-                    param.requires_grad = False
-                else:
+                if "head" in name:
                     param.requires_grad = True
                     logger.info(f"Parameter {name} is trainable.")
 
@@ -266,6 +267,8 @@ class RETFoundMAEClassifier(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.retfoundmae(x)
+    
+
 
 MODEL_CLASS_DICT: Dict[str, nn.Module] = {
     "resnet50": ResNet50Classifier,

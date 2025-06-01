@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from typing import Optional
+
 class temp_eval:
     def __init__(self, model: nn.Module):
         self.model = model
@@ -29,3 +31,94 @@ def get_model_params(model: nn.Module):
         "Trainable Parameters (raw)": trainable_params,
         "Percentage Trainable": f"{round((trainable_params / total_params) * 100, 2)}%" if total_params > 0 else "0%"
     }
+
+class LoRALayer(nn.Module):
+    def __init__(self, original_layer: nn.Linear, rank: int, lora_alpha: float):
+        super().__init__()
+        self.original_layer = original_layer
+        # Freeze the original layer's parameters
+        self.original_layer.weight.requires_grad_(False)
+        if self.original_layer.bias is not None:
+            self.original_layer.bias.requires_grad_(False)
+
+        self.rank = rank
+        self.lora_alpha = lora_alpha
+        # Pre-calculate scaling factor
+        self.scaling = self.lora_alpha / self.rank
+
+        # LoRA A matrix (in_features, rank)
+        # Bias is not needed for LoRA matrices
+        self.lora_A = nn.Linear(original_layer.in_features, rank, bias=False)
+        # LoRA B matrix (rank, out_features)
+        self.lora_B = nn.Linear(rank, original_layer.out_features, bias=False)
+
+        # Initialize LoRA A with Kaiming uniform and LoRA B with zeros
+        nn.init.kaiming_uniform_(self.lora_A.weight, a=5**0.5)
+        nn.init.zeros_(self.lora_B.weight)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Original layer's forward pass
+        original_output = self.original_layer(x)
+
+        # LoRA's forward pass: x @ lora_A @ lora_B * scaling
+        lora_output = self.lora_B(self.lora_A(x)) * self.scaling
+
+        return original_output + lora_output
+
+
+
+def apply_lora_to_model(model: nn.Module, rank: int = 64, lora_alpha: float = 128, exclude_modules: Optional[list] = None):
+    """
+    Applies LoRA (Low-Rank Adaptation) to all nn.Linear layers within a PyTorch model,
+    excluding specified modules.
+
+    This function first **freezes all parameters** of the original model. Then, for each
+    eligible `nn.Linear` layer, it replaces it with a `LoRALayer` instance. The `LoRALayer`
+    internally manages the frozen original linear layer and adds small, trainable
+    low-rank adaptation matrices (LoRA A and LoRA B). This means that after this
+    function is called, **only the LoRA matrices will be trainable**.
+
+    Args:
+        model (nn.Module): The PyTorch model to apply LoRA to.
+        rank (int): The rank of the LoRA update matrices (r in the LoRA paper).
+                    A higher rank allows for more expressiveness but increases trainable parameters.
+        lora_alpha (float): The LoRA scaling factor (alpha in the LoRA paper).
+                            This value is used to scale the output of the LoRA path:
+                            `scaling = lora_alpha / rank`.
+        exclude_modules (Optional[list]): A list of strings. If a module's full hierarchical name
+                                         (e.g., 'encoder.layer.0.attn.q_proj') contains any of
+                                         these strings as a substring, that `nn.Linear` layer
+                                         will be excluded from LoRA adaptation and its parameters
+                                         will remain frozen along with the rest of the original model.
+    """
+    if exclude_modules is None:
+        exclude_modules = []
+
+    # Freeze all parameters in the entire model
+    for param in model.parameters():
+        param.requires_grad_(False)
+
+    # Iterate through named modules and their direct parents
+    # This approach is more robust for replacing modules in place
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear):
+            should_exclude = False
+            for exclude_name_part in exclude_modules:
+                if exclude_name_part in name:
+                    should_exclude = True
+                    break
+
+            if should_exclude:
+                continue
+
+            # Get the parent module to replace the child
+            # Handle top-level modules differently
+            if '.' in name:
+                parent_name, child_name = name.rsplit('.', 1)
+                parent_module = model.get_submodule(parent_name)
+            else:
+                parent_module = model
+                child_name = name
+
+            # Replace the original nn.Linear layer with our LoRALayer
+            setattr(parent_module, child_name, LoRALayer(module, rank, lora_alpha))
