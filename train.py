@@ -48,7 +48,7 @@ class TrainArgs:
     pretrained: bool = True # Whether to use pretrained weights
     train_test_split: bool = False
 
-    label_smoothing: float = 0.1
+    label_smoothing: float = 0.0
 
 # Reproducibility Function
 def set_seed(seed: int):

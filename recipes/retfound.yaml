@@ -8,7 +8,7 @@ num_epochs: 50
 learning_rate: 0.0005
 test_split_ratio: 0.2
 eval_steps: 100
-patience: 3
+patience: 4
 num_classes: 5
 output_dir: output/retfound
 model_name: retfound
