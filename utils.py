@@ -19,6 +19,20 @@ class temp_eval:
         else:
             self.model.eval()
 
+def get_module_param_names(module: nn.Module):
+    all_param_names = []
+    trainable_param_names = []
+
+    for name, param in module.named_parameters():
+        all_param_names.append(name)
+        if param.requires_grad:
+            trainable_param_names.append(name)
+
+    return {
+        "All parameter names": all_param_names,
+        "Trainable parameter names": trainable_param_names
+    }
+
 
 def get_model_params(model: nn.Module):
     total_params = sum(p.numel() for p in model.parameters())

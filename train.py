@@ -15,7 +15,7 @@ from transformers import HfArgumentParser
 
 from dataset import MMAC2023Task1Dataset, AugmentationTransform, CenterCropTransform, RandomCropTransform
 from models import MODEL_CLASS_DICT
-from utils import temp_eval, get_model_params
+from utils import temp_eval, get_model_params, get_module_param_names
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -132,6 +132,7 @@ class Trainer:
         model = Model(num_classes=args.num_classes, pretrained=args.pretrained)
         model.to(args.device)
         logger.info(get_model_params(model))
+        logger.info(get_module_param_names(model))
         logger.info(f"Model moved to {args.device}.")
         return model
     
