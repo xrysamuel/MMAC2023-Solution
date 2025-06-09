@@ -226,14 +226,10 @@ class RETFoundMAEClassifier(nn.Module):
         else:
             self.retfoundmae = self.VisionTransformer(num_classes)
             state_dict = self.retfoundmae.state_dict()
-            for k in ['head.weight', 'head.bias']:
-                if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                    logger.info(f"Removing key {k} from pretrained checkpoint")
-                    del checkpoint_model[k]
             trunc_normal_(self.retfoundmae.head.weight, std=2e-5)
             logger.info("Initialized RETFoundMAE without pre-trained weights.")
 
-        if lora_backbone and pretrained:
+        if lora_backbone:
             apply_lora_to_model(self.retfoundmae, exclude_modules=["head"])
             logger.info(f"Apply lora to model.")
             for name, param in self.retfoundmae.named_parameters():

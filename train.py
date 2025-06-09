@@ -48,6 +48,8 @@ class TrainArgs:
     pretrained: bool = True # Whether to use pretrained weights
     train_test_split: bool = False
 
+    label_smoothing: float = 0.1
+
 # Reproducibility Function
 def set_seed(seed: int):
     """Sets the random seed for reproducibility."""
@@ -134,7 +136,8 @@ class Trainer:
         return model
     
     def _get_criterion(self):
-        return nn.CrossEntropyLoss()
+        args = self.args
+        return nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
     
     def _get_optimizer(self, model: nn.Module):
         args = self.args
