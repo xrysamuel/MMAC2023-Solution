@@ -197,7 +197,7 @@ class RETFoundMAEClassifier(nn.Module):
             logger.info("Initialized RETFoundMAE without pre-trained weights.")
 
         if lora_backbone:
-            apply_lora_to_model(self.retfoundmae, rank=64, lora_alpha=128, lora_dropout=0.1, exclude_modules=["head"])
+            apply_lora_to_model(self.retfoundmae, rank=32, lora_alpha=64, lora_dropout=0.1, exclude_modules=["head"])
             logger.info(f"Apply lora to model.")
             for name, param in self.retfoundmae.named_parameters():
                 if "head" in name:

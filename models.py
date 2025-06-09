@@ -1,8 +1,10 @@
-import torch
-import torch.nn as nn
 import logging
 from typing import Dict
 from functools import partial
+
+import torch
+from torch import nn
+
 from utils import apply_lora_to_model
 
 # Configure logging
@@ -203,8 +205,9 @@ class RETFoundMAEClassifier(nn.Module):
             logger.info("Attempting to download model from Hugging Face Hub.")
             from huggingface_hub import hf_hub_download
             checkpoint_path = hf_hub_download(
-                repo_id=f'YukunZhou/RETFound_mae_natureCFP',
-                filename=f'RETFound_mae_natureCFP.pth',
+                repo_id='YukunZhou/RETFound_mae_natureCFP',
+                filename='RETFound_mae_natureCFP.pth',
+                local_dir='.cache/'
             )
             logger.info(f"Loading model checkpoint from: {checkpoint_path}.")
             checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
@@ -230,7 +233,7 @@ class RETFoundMAEClassifier(nn.Module):
             logger.info("Initialized RETFoundMAE without pre-trained weights.")
 
         if lora_backbone:
-            apply_lora_to_model(self.retfoundmae, exclude_modules=["head"])
+            apply_lora_to_model(self.retfoundmae, rank=32, lora_alpha=64, lora_dropout=0.1, exclude_modules=["head"])
             logger.info(f"Apply lora to model.")
             for name, param in self.retfoundmae.named_parameters():
                 if "head" in name:
