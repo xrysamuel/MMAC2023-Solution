@@ -225,11 +225,11 @@ class MMAC2023Task1Dataset(Dataset):
         Returns:
             pd.DataFrame: A DataFrame with two columns: 'image' (str) and 'label' (int).
         """
-        image_names = self.image_files
+        image_paths = [os.path.join(self.images_dir, name) for name in self.image_names]
         labels = [self.image_to_label[img_name] for img_name in self.image_files]
 
         df = pd.DataFrame({
-            'image': image_names,
+            'image': image_paths,
             'label': labels
         })
         return df
