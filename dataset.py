@@ -217,6 +217,22 @@ class MMAC2023Task1Dataset(Dataset):
         image_tensor = (image_tensor - self.imagenet_mean) / self.imagenet_std
 
         return image_tensor, label_tensor
+    
+    def get_image_label_pair_df(self) -> pd.DataFrame:
+        """
+        Returns a Pandas DataFrame with image names and their corresponding labels.
+
+        Returns:
+            pd.DataFrame: A DataFrame with two columns: 'image' (str) and 'label' (int).
+        """
+        image_names = self.image_files
+        labels = [self.image_to_label[img_name] for img_name in self.image_files]
+
+        df = pd.DataFrame({
+            'image': image_names,
+            'label': labels
+        })
+        return df
 
 
 class Visualization:

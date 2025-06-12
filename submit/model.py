@@ -1,9 +1,17 @@
 import os
+import logging
+from typing import Optional
+from functools import partial
 import cv2
 import torch
 from torch import nn
 import numpy as np
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 class model:
     def __init__(self):
@@ -27,7 +35,7 @@ class model:
         :param dir_path: path to the submission directory (for internal use only).
         :return:
         """
-        self.model = ResNet18Classifier(num_classes=5)
+        self.model = ResNet18Classifier(num_classes=5, pretrained=False)
         # join paths
         checkpoint_path = os.path.join(dir_path, self.checkpoint)
         self.model.load_state_dict(torch.load(checkpoint_path, map_location=self.device))
@@ -102,6 +110,7 @@ class CenterCropTransform:
         left = max(0, left)
         image = image[top:top + self.size, left:left + self.size, :]
         return image
+
 
 class ResNet18Classifier(nn.Module):
     def __init__(self, num_classes: int = 5, pretrained: bool = True):
