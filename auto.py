@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 
-from autogluon.vision import ImagePredictor
+from autogluon.multimodal import MultiModalPredictor
 from sklearn.model_selection import train_test_split
 
 from dataset import MMAC2023Task1Dataset, AugmentationTransform, CenterCropTransform, RandomCropTransform
@@ -25,24 +25,24 @@ train_dataset: MMAC2023Task1Dataset = MMAC2023Task1Dataset(
     images_dir=training_set_images_dir,
     labels_path=training_set_labels_path,
     transform=[],
-)
+).get_image_label_pair_df()
 
 val_dataset: MMAC2023Task1Dataset = MMAC2023Task1Dataset(
     images_dir=validation_set_images_dir,
     labels_path=validation_set_labels_path,
     transform=[],
-)
+).get_image_label_pair_df()
 
 # Initialize the ImagePredictor
-predictor = ImagePredictor(path="output/auto")
+predictor = MultiModalPredictor(label="label", path="output/auto")
+
+print(train_dataset)
 
 print("\nStarting AutoGluon training...")
 predictor.fit(
     train_dataset,
     tuning_data=val_dataset, # Use the validation data for early stopping and hyperparameter tuning
-    hyperparameters={'epochs': 10, 'batch_size': 32}, # Example: run for 5 epochs
-    # hyperparameters={'model': ['resnet50', 'mobilenet_v3_large']}
-    time_limit=3600 # 1 hour
+    time_limit=360 # 1 hour
 )
 
 # Evaluate the model on the validation set
