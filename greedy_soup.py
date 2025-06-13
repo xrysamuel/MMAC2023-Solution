@@ -22,4 +22,4 @@ if __name__ == "__main__":
     logging.info(train_args)
     
     trainer = Trainer(train_args)
-    trainer.train()
+    trainer.greedy_soup()

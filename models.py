@@ -1,5 +1,5 @@
 import logging
-from typing import Dict
+from typing import Dict, Union, Tuple
 from functools import partial
 
 import torch
@@ -58,6 +58,41 @@ class ResNet18Classifier(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.resnet(x)
+
+class InceptionV3Classifier(nn.Module):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+        super().__init__()
+        from torchvision.models import inception_v3, Inception_V3_Weights
+
+        if pretrained:
+            # Inception v3 requires a specific input size (299x299) and has an auxiliary output
+            self.inception = inception_v3(weights=Inception_V3_Weights.IMAGENET1K_V1, aux_logits=True)
+            logger.info("Initialized InceptionV3 with ImageNet pre-trained weights.")
+        else:
+            self.inception = inception_v3(weights=None, aux_logits=True)
+            logger.info("Initialized InceptionV3 without pre-trained weights.")
+
+        num_ftrs = self.inception.fc.in_features
+        self.inception.fc = nn.Linear(num_ftrs, num_classes)
+        logger.info(
+            f"Modified final layer to have {num_classes} output features for InceptionV3."
+        )
+
+        # InceptionV3 also has an auxiliary classifier ('AuxLogits.fc')
+        # If aux_logits is True, you might also want to modify or remove this.
+        # For simplicity in this example, we'll just disable its training if we don't need it.
+        # If you plan to use it for training (e.g., as part of the loss), you'd modify it similarly.
+        if pretrained: # Only if pre-trained, as aux_logits is True
+            if self.inception.AuxLogits is not None:
+                num_aux_ftrs = self.inception.AuxLogits.fc.in_features
+                self.inception.AuxLogits.fc = nn.Linear(num_aux_ftrs, num_classes)
+                logger.info(f"Modified auxiliary final layer to have {num_classes} output features for InceptionV3.")
+            else:
+                logger.warning("AuxLogits is None even though pretrained=True. This might indicate an issue.")
+
+
+    def forward(self, x: torch.Tensor) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        return self.inception(x)
 
 
 class EfficientNetV2SClassifier(nn.Module):
@@ -276,4 +311,5 @@ MODEL_CLASS_DICT: Dict[str, nn.Module] = {
     "effnetv2s": EfficientNetV2SClassifier,
     "effnetv2m": EfficientNetV2MClassifier,
     "retfound": RETFoundMAEClassifier,
+    "inceptionv3": InceptionV3Classifier,
 }
