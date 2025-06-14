@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class ResNet50Classifier(nn.Module):
-    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5):
         super().__init__()
         from torchvision.models import resnet50, ResNet50_Weights
 
@@ -28,15 +28,20 @@ class ResNet50Classifier(nn.Module):
 
         # Modify the final classification layer
         num_ftrs = self.resnet.fc.in_features
-        self.resnet.fc = nn.Linear(num_ftrs, num_classes)
-        logger.info(f"Modified final layer to have {num_classes} output features.")
+        self.resnet.fc = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(num_ftrs, num_classes)
+        )
+        logger.info(
+            f"Modified final layer to have {num_classes} output features for ResNet18 with dropout rate {dropout}."
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.resnet(x)
 
 
 class ResNet18Classifier(nn.Module):
-    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5):
         super().__init__()
         from torchvision.models import resnet18, ResNet18_Weights
 
@@ -51,25 +56,28 @@ class ResNet18Classifier(nn.Module):
 
         # Modify the final classification layer
         num_ftrs = self.resnet.fc.in_features
-        self.resnet.fc = nn.Linear(num_ftrs, num_classes)
+        self.resnet.fc = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(num_ftrs, num_classes)
+        )
         logger.info(
-            f"Modified final layer to have {num_classes} output features for ResNet18."
+            f"Modified final layer to have {num_classes} output features for ResNet18 with dropout rate {dropout}."
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.resnet(x)
 
 class InceptionV3Classifier(nn.Module):
-    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5):
         super().__init__()
         from torchvision.models import inception_v3, Inception_V3_Weights
 
         if pretrained:
             # Inception v3 requires a specific input size (299x299) and has an auxiliary output
-            self.inception = inception_v3(weights=Inception_V3_Weights.IMAGENET1K_V1, aux_logits=True)
+            self.inception = inception_v3(weights=Inception_V3_Weights.IMAGENET1K_V1, aux_logits=True, dropout=dropout)
             logger.info("Initialized InceptionV3 with ImageNet pre-trained weights.")
         else:
-            self.inception = inception_v3(weights=None, aux_logits=True)
+            self.inception = inception_v3(weights=None, aux_logits=True, dropout=dropout)
             logger.info("Initialized InceptionV3 without pre-trained weights.")
 
         num_ftrs = self.inception.fc.in_features
@@ -79,16 +87,12 @@ class InceptionV3Classifier(nn.Module):
         )
 
         # InceptionV3 also has an auxiliary classifier ('AuxLogits.fc')
-        # If aux_logits is True, you might also want to modify or remove this.
-        # For simplicity in this example, we'll just disable its training if we don't need it.
-        # If you plan to use it for training (e.g., as part of the loss), you'd modify it similarly.
-        if pretrained: # Only if pre-trained, as aux_logits is True
-            if self.inception.AuxLogits is not None:
-                num_aux_ftrs = self.inception.AuxLogits.fc.in_features
-                self.inception.AuxLogits.fc = nn.Linear(num_aux_ftrs, num_classes)
-                logger.info(f"Modified auxiliary final layer to have {num_classes} output features for InceptionV3.")
-            else:
-                logger.warning("AuxLogits is None even though pretrained=True. This might indicate an issue.")
+        if self.inception.AuxLogits is not None:
+            num_aux_ftrs = self.inception.AuxLogits.fc.in_features
+            self.inception.AuxLogits.fc = nn.Linear(num_aux_ftrs, num_classes)
+            logger.info(f"Modified auxiliary final layer to have {num_classes} output features for InceptionV3.")
+        else:
+            logger.warning("AuxLogits is None even though pretrained=True. This might indicate an issue.")
 
 
     def forward(self, x: torch.Tensor) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
@@ -96,7 +100,7 @@ class InceptionV3Classifier(nn.Module):
 
 
 class EfficientNetV2SClassifier(nn.Module):
-    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5):
         super().__init__()
         from torchvision.models import efficientnet_v2_s, EfficientNet_V2_S_Weights
 
@@ -114,7 +118,10 @@ class EfficientNetV2SClassifier(nn.Module):
         # Modify the final classification layer (EfficientNet usually has a 'classifier' attribute)
         # It's typically a Sequential with a Linear layer as the last component.
         num_ftrs = self.efficientnet.classifier[1].in_features
-        self.efficientnet.classifier[1] = nn.Linear(num_ftrs, num_classes)
+        self.efficientnet.classifier[1] = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(num_ftrs, num_classes)
+        )
         logger.info(
             f"Modified final layer to have {num_classes} output features for EfficientNetV2-S."
         )
@@ -124,7 +131,7 @@ class EfficientNetV2SClassifier(nn.Module):
 
 
 class EfficientNetV2MClassifier(nn.Module):
-    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5):
         super().__init__()
         from torchvision.models import efficientnet_v2_m, EfficientNet_V2_M_Weights
 
@@ -142,7 +149,10 @@ class EfficientNetV2MClassifier(nn.Module):
         # Modify the final classification layer (EfficientNet usually has a 'classifier' attribute)
         # It's typically a Sequential with a Linear layer as the last component.
         num_ftrs = self.efficientnet.classifier[1].in_features
-        self.efficientnet.classifier[1] = nn.Linear(num_ftrs, num_classes)
+        self.efficientnet.classifier[1] = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(num_ftrs, num_classes)
+        )
         logger.info(
             f"Modified final layer to have {num_classes} output features for EfficientNetV2-S."
         )
@@ -152,7 +162,7 @@ class EfficientNetV2MClassifier(nn.Module):
 
 
 class MobileNetV3Classifier(nn.Module):
-    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5):
         super().__init__()
         from torchvision.models import mobilenet_v3_large, MobileNet_V3_Large_Weights
 
@@ -172,7 +182,10 @@ class MobileNetV3Classifier(nn.Module):
         num_ftrs = self.mobilenet.classifier[
             3
         ].in_features  # Check the exact index for your MobileNetV3 version
-        self.mobilenet.classifier[3] = nn.Linear(num_ftrs, num_classes)
+        self.mobilenet.classifier[3] = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(num_ftrs, num_classes)
+        )
         logger.info(
             f"Modified final layer to have {num_classes} output features for MobileNetV3-Large."
         )
@@ -302,7 +315,94 @@ class RETFoundMAEClassifier(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.retfoundmae(x)
     
+class ConvNeXtClassifier(nn.Module):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5, model_size: str = 'tiny'):
+        super().__init__()
+        from torchvision.models import convnext_base, convnext_small, convnext_tiny, ConvNeXt_Base_Weights, ConvNeXt_Small_Weights, ConvNeXt_Tiny_Weights
 
+        if model_size == 'base':
+            if pretrained:
+                self.convnext = convnext_base(weights=ConvNeXt_Base_Weights.IMAGENET1K_V1)
+                logger.info("Initialized ConvNeXt-Base with ImageNet pre-trained weights.")
+            else:
+                self.convnext = convnext_base(weights=None)
+                logger.info("Initialized ConvNeXt-Base without pre-trained weights.")
+        elif model_size == 'small':
+            if pretrained:
+                self.convnext = convnext_small(weights=ConvNeXt_Small_Weights.IMAGENET1K_V1)
+                logger.info("Initialized ConvNeXt-Small with ImageNet pre-trained weights.")
+            else:
+                self.convnext = convnext_small(weights=None)
+                logger.info("Initialized ConvNeXt-Small without pre-trained weights.")
+        elif model_size == 'tiny':
+            if pretrained:
+                self.convnext = convnext_tiny(weights=ConvNeXt_Tiny_Weights.IMAGENET1K_V1)
+                logger.info("Initialized ConvNeXt-Tiny with ImageNet pre-trained weights.")
+            else:
+                self.convnext = convnext_tiny(weights=None)
+                logger.info("Initialized ConvNeXt-Tiny without pre-trained weights.")
+        else:
+            raise ValueError(f"Unsupported ConvNeXt model_size: {model_size}. Choose from 'tiny', 'small', 'base'.")
+
+        # ConvNeXt models have a different head structure.
+        # The classifier is usually convnext.classifier[2] (Linear layer)
+        # We need to replace the entire classifier module or just its last linear layer.
+        # torchvision's ConvNeXt models have `self.classifier` which is `nn.Sequential`
+        # The last layer is usually a `nn.Linear` at index 2 or 3 depending on batch norm presence.
+        num_ftrs = self.convnext.classifier[-1].in_features
+        self.convnext.classifier[-1] = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(num_ftrs, num_classes)
+        )
+        logger.info(
+            f"Modified final layer to have {num_classes} output features for ConvNeXt-{model_size} with dropout rate {dropout}."
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.convnext(x)
+
+
+class SwinTransformerClassifier(nn.Module):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5, model_size: str = 'tiny'):
+        super().__init__()
+        from torchvision.models import swin_b, swin_s, swin_t, Swin_B_Weights, Swin_S_Weights, Swin_T_Weights
+
+        if model_size == 'base':
+            if pretrained:
+                self.swin_transformer = swin_b(weights=Swin_B_Weights.IMAGENET1K_V1)
+                logger.info("Initialized SwinTransformer-Base with ImageNet pre-trained weights.")
+            else:
+                self.swin_transformer = swin_b(weights=None)
+                logger.info("Initialized SwinTransformer-Base without pre-trained weights.")
+        elif model_size == 'small':
+            if pretrained:
+                self.swin_transformer = swin_s(weights=Swin_S_Weights.IMAGENET1K_V1)
+                logger.info("Initialized SwinTransformer-Small with ImageNet pre-trained weights.")
+            else:
+                self.swin_transformer = swin_s(weights=None)
+                logger.info("Initialized SwinTransformer-Small without pre-trained weights.")
+        elif model_size == 'tiny':
+            if pretrained:
+                self.swin_transformer = swin_t(weights=Swin_T_Weights.IMAGENET1K_V1)
+                logger.info("Initialized SwinTransformer-Tiny with ImageNet pre-trained weights.")
+            else:
+                self.swin_transformer = swin_t(weights=None)
+                logger.info("Initialized SwinTransformer-Tiny without pre-trained weights.")
+        else:
+            raise ValueError(f"Unsupported SwinTransformer model_size: {model_size}. Choose from 'tiny', 'small', 'base'.")
+
+        # SwinTransformer models in torchvision have a `head` attribute which is the final Linear layer.
+        num_ftrs = self.swin_transformer.head.in_features
+        self.swin_transformer.head = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(num_ftrs, num_classes)
+        )
+        logger.info(
+            f"Modified final layer to have {num_classes} output features for SwinTransformer-{model_size} with dropout rate {dropout}."
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.swin_transformer(x)
 
 MODEL_CLASS_DICT: Dict[str, nn.Module] = {
     "resnet50": ResNet50Classifier,
@@ -312,4 +412,6 @@ MODEL_CLASS_DICT: Dict[str, nn.Module] = {
     "effnetv2m": EfficientNetV2MClassifier,
     "retfound": RETFoundMAEClassifier,
     "inceptionv3": InceptionV3Classifier,
+    "convnext": ConvNeXtClassifier,
+    "swintransformer": SwinTransformerClassifier
 }

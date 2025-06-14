@@ -276,6 +276,7 @@ class Visualization:
 
 # --- Example Usage ---
 if __name__ == "__main__":
+    from data_utils import image_dataset_analyze
     training_set_images_dir: str = (
         "1. Classification of Myopic Maculopathy/1. Images/1. Training Set"
     )
@@ -291,19 +292,19 @@ if __name__ == "__main__":
     )
 
     aug_transform = AugmentationTransform()
-    vis_transform = Visualization()
+    visualize_tool = Visualization()
 
     print("--- Initializing Training Dataset ---")
     train_dataset: MMAC2023Task1Dataset = MMAC2023Task1Dataset(
         images_dir=training_set_images_dir,
         labels_path=training_set_labels_path,
         transform=[
-            vis_transform.collect,
+            visualize_tool.collect,
             AugmentationTransform(),
             RandomCropTransform(),
-            vis_transform.collect,
-            vis_transform.draw,
-            vis_transform.discard_all,
+            visualize_tool.collect,
+            visualize_tool.draw,
+            visualize_tool.discard_all,
         ],
     )
     print(f"Number of training samples: {len(train_dataset)}")
@@ -343,5 +344,9 @@ if __name__ == "__main__":
             f"Batch {batch_idx}: Images shape {images.shape}, Labels shape {labels.shape}, Labels {labels}"
         )
         print(f"Batch {batch_idx}: Images dtype {images.dtype}")
-        if batch_idx == 2:  # Print details for first 3 batches
-            break
+        break
+
+    # image_dataset_analyze(train_dataset.get_image_label_pair_df(), "output/data/train")
+    image_dataset_analyze(val_dataset.get_image_label_pair_df(), "output/data/valid")
+
+    

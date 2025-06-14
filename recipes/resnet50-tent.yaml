@@ -15,6 +15,7 @@ model_name: resnet50
 model_save_name: resnet50_best.pth
 random_seed: 42 # Set a specific seed for reproducibility
 pretrained: True # Use pre-trained weights by default
+tent: True
 label_smoothing: 0.2
 model_kwargs:
   dropout: 0.5

@@ -113,17 +113,28 @@ class CenterCropTransform:
 
 
 class ResNet18Classifier(nn.Module):
-    def __init__(self, num_classes: int = 5, pretrained: bool = True):
+    def __init__(self, num_classes: int = 5, pretrained: bool = True, dropout: float = 0.5):
         super().__init__()
         from torchvision.models import resnet18, ResNet18_Weights
+
         if pretrained:
-            self.resnet = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1) # Use appropriate weights for ResNet18
+            self.resnet = resnet18(
+                weights=ResNet18_Weights.IMAGENET1K_V1
+            )  # Use appropriate weights for ResNet18
+            logger.info("Initialized ResNet18 with ImageNet pre-trained weights.")
         else:
             self.resnet = resnet18(weights=None)
-        
+            logger.info("Initialized ResNet18 without pre-trained weights.")
+
         # Modify the final classification layer
         num_ftrs = self.resnet.fc.in_features
-        self.resnet.fc = nn.Linear(num_ftrs, num_classes)
+        self.resnet.fc = nn.Sequential(
+            nn.Dropout(p=dropout),
+            nn.Linear(num_ftrs, num_classes)
+        )
+        logger.info(
+            f"Modified final layer to have {num_classes} output features for ResNet18 with dropout rate {dropout}."
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.resnet(x)

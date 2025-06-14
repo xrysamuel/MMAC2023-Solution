@@ -23,8 +23,8 @@ python train.py recipes/resnet18.yaml
 Submit by modifying the model class in model.py and copying the best model checkpoint to the submit folder.
 
 ```bash
-MODEL_NAME=resnet50
-zip -r submit-${MODEL_NAME}.zip submit-${MODEL_NAME}/*
+MODEL_NAME=resnet18
+zip -r submit/submit-${MODEL_NAME}.zip submit/submit-${MODEL_NAME}/*
 ```
 
 If you are training a RETFound model and need to load from a pre-trained checkpoint, please obtain checkpoint access from Hugging Face first, then execute `huggingface-cli login --token <yourtoken>`.
@@ -61,7 +61,9 @@ trainer = Trainer(train_args)
 trainer.train()
 ```
 
-## Result
+## 
+
+## Best Result
 
 https://codalab.lisn.upsaclay.fr/competitions/12441
 
