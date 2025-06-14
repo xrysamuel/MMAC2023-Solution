@@ -1,7 +1,9 @@
-import torch
-import torch.nn as nn
 
 from typing import Optional
+import threading
+
+import torch
+import torch.nn as nn
 
 class temp_eval:
     def __init__(self, model: nn.Module):
@@ -147,3 +149,19 @@ def apply_lora_to_model(model: nn.Module, rank: int = 64, lora_alpha: float = 12
             # Replace the original nn.Linear layer with our LoRALayer.
             # The LoRALayer will internally manage the frozen original layer and its own trainable LoRA matrices.
             setattr(parent_module, child_name, LoRALayer(module, rank, lora_alpha, lora_dropout))
+
+
+class interrupt_proof:
+    def __init__(self, graceful_exit_function):
+        if not callable(graceful_exit_function):
+            raise ValueError("graceful_exit_function must be a callable.")
+        self.graceful_exit_function = graceful_exit_function
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is KeyboardInterrupt:
+            self.graceful_exit_function()
+            return True  # Suppress KeyboardInterrupt
+        return False  # Propagate other exceptions

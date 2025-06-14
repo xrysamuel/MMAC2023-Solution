@@ -20,7 +20,7 @@ from dataset import (
     RandomCropTransform,
 )
 from models import MODEL_CLASS_DICT
-from utils import temp_eval, get_model_params, get_module_param_names
+from utils import temp_eval, get_model_params, get_module_param_names, interrupt_proof
 
 # Configure logging
 logging.basicConfig(
@@ -78,6 +78,8 @@ class TrainArgs:
     tent_steps: int = 3  # Number of forward passes to update BN stats
     tent_epochs: int = 1  # Number of times to iterate through the test dataset
 
+    data_augmentation: bool = True
+
 
 # Reproducibility Function
 def set_seed(seed: int):
@@ -108,10 +110,14 @@ class Trainer:
         args = self.args
 
         logger.info("Loading full dataset...")
+        if args.data_augmentation:
+            transform = [AugmentationTransform(), RandomCropTransform()]
+        else:
+            transform = [CenterCropTransform()]
         full_dataset = MMAC2023Task1Dataset(
             images_dir=args.images_dir,
             labels_path=args.labels_path,
-            transform=[AugmentationTransform(), RandomCropTransform()],
+            transform=transform,
             output_size=args.image_size,
         )
 
@@ -269,7 +275,9 @@ class Trainer:
         train_loader, test_loader, valid_loader, model, criterion, optimizer = (
             self._before_train()
         )
-        self._train(train_loader, test_loader, model, criterion, optimizer)
+        after_train = lambda: self._after_train(model, valid_loader, criterion)
+        with interrupt_proof(after_train):
+            self._train(train_loader, test_loader, model, criterion, optimizer)
         self._after_train(model, valid_loader, criterion)
 
     def _before_train(self):
