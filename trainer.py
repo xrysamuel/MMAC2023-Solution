@@ -10,14 +10,18 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 from transformers import HfArgumentParser
+from sklearn.metrics import roc_curve, auc
+import pandas as pd
 
 from dataset import (
     MMAC2023Task1Dataset,
     AugmentationTransform,
     CenterCropTransform,
     RandomCropTransform,
+    CutMixTransform
 )
 from models import MODEL_CLASS_DICT
 from utils import temp_eval, get_model_params, get_module_param_names, interrupt_proof
@@ -110,8 +114,13 @@ class Trainer:
         args = self.args
 
         logger.info("Loading full dataset...")
+        ref_dataset: MMAC2023Task1Dataset = MMAC2023Task1Dataset(
+            images_dir=args.images_dir,
+            labels_path=args.labels_path,
+            transform=[]
+        )
         if args.data_augmentation:
-            transform = [AugmentationTransform(), RandomCropTransform()]
+            transform = [CutMixTransform(ref_dataset), AugmentationTransform(), RandomCropTransform()]
         else:
             transform = [CenterCropTransform()]
         full_dataset = MMAC2023Task1Dataset(
@@ -164,7 +173,7 @@ class Trainer:
             )
             logger.info(f"Validation samples: {len(validation_dataset)}")
 
-            return train_loader, test_loader, valid_loader
+            return train_loader, valid_loader, valid_loader
         else:
             total_size = len(full_dataset)
 
@@ -209,19 +218,27 @@ class Trainer:
         model.to(args.device)
         logger.info(f"Model moved to {args.device}.")
         return model
-
-    def _criterion(self, outputs, labels):
+    
+    def _criterion(self, outputs, encoded_labels):
         args = self.args
-        criterion_base = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
+        criterion_base = nn.BCEWithLogitsLoss(reduction='mean') # 'mean' is default for BCEWithLogitsLoss
+
+        num_classes = encoded_labels.size(-1)
+        encoded_labels = encoded_labels.float()
+        epsilon = args.label_smoothing
+        
+        if epsilon > 0:
+            encoded_labels = (1 - epsilon) * encoded_labels + epsilon / num_classes
 
         if isinstance(outputs, tuple) and len(outputs) == 2:
             main_logits = outputs[0]
             aux_logits = outputs[1]
-            main_loss = criterion_base(main_logits, labels)
-            aux_loss = criterion_base(aux_logits, labels)
+
+            main_loss = criterion_base(main_logits, encoded_labels)
+            aux_loss = criterion_base(aux_logits, encoded_labels)
             total_loss = main_loss + aux_loss * args.aux_logits_loss_weight
         elif isinstance(outputs, torch.Tensor):
-            total_loss = criterion_base(outputs, labels)
+            total_loss = criterion_base(outputs, encoded_labels)
         else:
             raise TypeError(
                 f"Unsupported outputs type: {type(outputs)}. Expected torch.Tensor or a tuple containing logits."
@@ -257,10 +274,10 @@ class Trainer:
         total = 0
 
         with torch.no_grad():
-            for inputs, labels in dataloader:
-                inputs, labels = inputs.to(args.device), labels.to(args.device)
+            for inputs, labels, encoded_label in dataloader:
+                inputs, labels, encoded_label = inputs.to(args.device), labels.to(args.device), encoded_label.to(args.device)
                 outputs = model(inputs)
-                loss_test = criterion(outputs, labels)
+                loss_test = criterion(outputs, encoded_label)
 
                 loss += loss_test.item() * inputs.size(0)
                 _, predicted = torch.max(outputs.data, 1)
@@ -275,8 +292,8 @@ class Trainer:
         train_loader, test_loader, valid_loader, model, criterion, optimizer = (
             self._before_train()
         )
-        after_train = lambda: self._after_train(model, valid_loader, criterion)
-        with interrupt_proof(after_train):
+        do_nothing = lambda: None
+        with interrupt_proof(do_nothing):
             self._train(train_loader, test_loader, model, criterion, optimizer)
         self._after_train(model, valid_loader, criterion)
 
@@ -301,12 +318,12 @@ class Trainer:
             correct_train = 0
             total_train = 0
 
-            for batch_idx, (inputs, labels) in enumerate(train_loader):
-                inputs, labels = inputs.to(args.device), labels.to(args.device)
+            for batch_idx, (inputs, labels, encoded_label) in enumerate(train_loader):
+                inputs, labels, encoded_label = inputs.to(args.device), labels.to(args.device), encoded_label.to(args.device)
 
                 optimizer.zero_grad()
                 outputs = model(inputs)
-                loss = criterion(outputs, labels)
+                loss = criterion(outputs, encoded_label)
                 loss.backward()
                 optimizer.step()
 
@@ -378,6 +395,9 @@ class Trainer:
             avg_valid_loss, valid_accuracy = self._evaluation(
                 valid_loader, eval_model, criterion
             )
+            self._roc(
+                valid_loader, eval_model
+            )
         logger.info(
             f"Final Validation Loss: {avg_valid_loss:.4f}, Final Validation Accuracy: {valid_accuracy:.4f}"
         )
@@ -391,6 +411,58 @@ class Trainer:
             logger.info(
                 f"After TENT, Final Validation Loss: {avg_valid_loss:.4f}, Final Validation Accuracy: {valid_accuracy:.4f}"
             )
+
+    def _roc(self, dataloader, model):
+        """
+        Calculates and saves ROC curve data (FPR, TPR) for each class
+        without plotting. Data is saved as CSV files.
+        """
+        args = self.args
+        roc_output_dir = os.path.join(args.output_dir, "roc")
+        os.makedirs(roc_output_dir, exist_ok=True)
+        logger.info(f"ROC data will be saved to: {roc_output_dir}")
+
+        model.eval()
+        all_labels = []
+        all_predictions = []
+
+        with torch.no_grad():
+            for inputs, labels, _ in dataloader:
+                inputs = inputs.to(args.device)
+                outputs = model(inputs)
+                if not isinstance(outputs, torch.Tensor):
+                    return
+                probabilities = F.softmax(outputs, dim=1).cpu().numpy()
+                all_predictions.extend(probabilities)
+                all_labels.extend(labels.cpu().numpy())
+
+        all_labels = np.array(all_labels)
+        all_predictions = np.array(all_predictions)
+
+        for i in range(args.num_classes):
+            # For each class, we treat it as the positive class and others as negative
+            y_true = (all_labels == i).astype(int)
+            y_score = all_predictions[:, i]
+
+            # Calculate FPR, TPR, and thresholds
+            fpr, tpr, thresholds = roc_curve(y_true, y_score)
+
+            # Calculate AUC for the current class
+            roc_auc = auc(fpr, tpr)
+            logger.info(f"AUC for class {i}: {roc_auc:.4f}")
+
+            roc_df = pd.DataFrame(
+                {
+                    "threshold": thresholds,
+                    "fpr": fpr,
+                    "tpr": tpr,
+                }
+            )
+
+            # Save to CSV
+            csv_filename = os.path.join(roc_output_dir, f"roc-class_{i}.csv")
+            roc_df.to_csv(csv_filename, index=False)
+            logger.info(f"ROC data for class {i} saved to {csv_filename}")
 
     def _tent(self, model: nn.Module):
         """
@@ -451,7 +523,7 @@ class Trainer:
         for epoch in range(args.tent_epochs):
             running_loss = 0.0
             total = 0
-            for batch_idx, (inputs, _) in enumerate(test_dataloader):
+            for batch_idx, (inputs, _, _) in enumerate(test_dataloader):
                 inputs = inputs.to(args.device)
 
                 for _ in range(args.tent_steps):
